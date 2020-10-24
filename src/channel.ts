@@ -24,7 +24,7 @@ export class Channel<T, P extends PortLike = MessagePort>
     this.iter = asyncify(
       (next) =>
         new Promise((_, reject) => {
-          port.onmessage = (e: MessageEvent) => next(e.data);
+          port.onmessage = (e: MessageEvent) => next(decode(e.data));
           port.onmessageerror = (e: MessageEvent) => reject(e.data);
         })
     );
@@ -40,7 +40,7 @@ export class Channel<T, P extends PortLike = MessagePort>
   }
 
   async recv(): Promise<T> {
-    return decode((await this.iter.next()).value);
+    return (await this.iter.next()).value;
   }
 
   close() {
