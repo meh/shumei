@@ -5,14 +5,15 @@ export interface PortLike {
   onmessage: (ev: MessageEvent) => any;
   onmessageerror: (ev: MessageEvent) => any;
   postMessage(message: any, transfer: Transferable[]): void;
+  close?(): void;
 }
 
 export interface Receiver<T> {
-  [Symbol.asyncIterator](): AsyncIterator<T>;
+  recv(): Promise<T>;
 }
 
 export interface Sender<T> {
-  postMessage(message: any, transfer: Transferable[]): void;
+  send(value: T): void;
 }
 
 export class Channel<T, P extends PortLike = MessagePort>
@@ -23,8 +24,8 @@ export class Channel<T, P extends PortLike = MessagePort>
     this.iter = asyncify(
       (next) =>
         new Promise((_, reject) => {
-          port.onmessage = (e: MessageEvent) => next(decode(e.data));
-          port.onmessageerror = (e: MessageEvent) => reject(e);
+          port.onmessage = (e: MessageEvent) => next(e.data);
+          port.onmessageerror = (e: MessageEvent) => reject(e.data);
         })
     );
   }
@@ -33,16 +34,17 @@ export class Channel<T, P extends PortLike = MessagePort>
     return this.iter;
   }
 
-  postMessage(message: any, transfer: Transferable[]) {
+  send(value: T) {
+    const [message, transfer] = encode(value);
     this.port.postMessage(message, transfer);
   }
 
-  send(value: T) {
-    send(this, value);
+  async recv(): Promise<T> {
+    return decode((await this.iter.next()).value);
   }
 
-  async recv(): Promise<T> {
-    return await recv(this);
+  close() {
+    this.port.close();
   }
 }
 
@@ -51,13 +53,8 @@ export function pair<T>(): [Channel<T>, Channel<T>] {
   return [new Channel(channel.port1), new Channel(channel.port2)];
 }
 
-export function send<T>(sender: Sender<T>, value: T) {
-  const [message, transfer] = encode(value);
-  sender.postMessage(message, transfer);
-}
-
-export async function recv<T>(receiver: Receiver<T>): Promise<T> {
-  return (await receiver[Symbol.asyncIterator]().next()).value;
+export function broadcast<T>(name: string): Channel<T, BroadcastChannel> {
+  return new Channel(new BroadcastChannel(name));
 }
 
 codec("CHANNEL", {
