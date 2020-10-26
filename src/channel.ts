@@ -57,6 +57,26 @@ export function broadcast<T>(name: string): Channel<T, BroadcastChannel> {
   return new Channel(new BroadcastChannel(name));
 }
 
+export function select<T extends unknown[]>(
+  ...channels: Channel<T>[]
+): AsyncIterator<{ channel: Channel<T>; value: T }> {
+  return asyncify(
+    (next) =>
+      new Promise((_) => {
+        const recv = (channel: Channel<T>) => {
+          channel.recv().then((value) => {
+            next({ channel, value });
+            recv(channel);
+          });
+        };
+
+        for (const channel of channels) {
+          recv(channel);
+        }
+      })
+  );
+}
+
 codec("CHANNEL", {
   canHandle: <T>(value: unknown): value is Channel<T> =>
     value instanceof Channel,
