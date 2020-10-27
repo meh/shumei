@@ -81,5 +81,5 @@ codec("Channel", {
   canHandle: <T>(value: unknown): value is Channel<T> =>
     value instanceof Channel,
   encode: <T>(channel: Channel<T>) => [channel.port, [channel.port]],
-  decode: <T>(value: MessagePort): Channel<T> => new Channel(value)
+  decode: <T>(value: MessagePort): Channel<T> => new Channel(value),
 });

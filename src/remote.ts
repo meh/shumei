@@ -4,7 +4,7 @@ import { Wire, codec, transfer, encode, decode } from "./protocol";
 import { Channel, pair as mkChannelPair } from "./channel";
 import { Mailbox } from "./mailbox";
 
-export namespace Message {
+namespace Message {
   export type ID = string;
 
   export const enum Type {
@@ -88,15 +88,15 @@ export namespace Thrown {
   const MARKER = Symbol("shumei.thrown");
 
   export interface Value {
-    [MARKER]: unknown;
-    value: unknown;
+    [MARKER]: true;
+    value: Wire.Serializable;
   }
 
   export type Encoded =
     | { isError: true; value: Error }
-    | { isError: false; value: unknown };
+    | { isError: false; value: Wire.Serializable };
 
-  codec("THROW", {
+  codec("throw", {
     canHandle: (value: any): value is Value =>
       _.isObject(value) && MARKER in value,
 
@@ -128,7 +128,7 @@ export namespace Thrown {
   });
 }
 
-export class Remote<T extends object> {
+export class Remote<T> {
   private mbox: Mailbox<Message.Any>;
 
   constructor(channel: Channel<Message.Any>) {
@@ -136,7 +136,7 @@ export class Remote<T extends object> {
     return new Proxy(() => {}, this);
   }
 
-  static handler(value: any): Channel<Message.Any> {
+  static spawn(value: any): Channel<Message.Any> {
     const [master, slave] = mkChannelPair<Message.Any>();
     const handle = (channel: Channel<Message.Any>) => {
       channel.recv().then((msg) => {
@@ -300,25 +300,25 @@ export class Remote<T extends object> {
   }
 }
 
-export function value<T>(value: T): T & Marked {
-  return Object.assign(value, { [MARKER]: true }) as any;
-}
-
-export const MARKER = Symbol("shumei.remote");
+const MARKER = Symbol("shumei.remote");
 
 export interface Marked {
   [MARKER]: true;
 }
 
+export function value<T extends object>(value: T): T & Marked {
+  return Object.assign(value, { [MARKER]: true }) as any;
+}
+
 codec("Function", {
   canHandle: (value: unknown): value is Function => _.isFunction(value),
-  encode: (value) => encode(Remote.handler(value)),
+  encode: (value) => encode(Remote.spawn(value)),
   decode: <T extends object>(value: any) => new Remote<T>(decode(value)),
 });
 
 codec("Remote", {
   canHandle: (value: unknown): value is Marked =>
     _.isObject(value) && (value as Marked)[MARKER],
-  encode: (value) => encode(Remote.handler(value)),
+  encode: (value) => encode(Remote.spawn(value)),
   decode: <T extends object>(value: any) => new Remote<T>(decode(value)),
 });
