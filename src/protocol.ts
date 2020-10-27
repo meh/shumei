@@ -1,8 +1,11 @@
 export namespace Wire {
-  export type Primitive = bigint | boolean | number | string | null | undefined;
-
   export type Serializable =
-    | Primitive
+    | bigint
+    | boolean
+    | number
+    | string
+    | null
+    | undefined
     | RegExp
     | Date
     | Blob
@@ -18,8 +21,8 @@ export namespace Wire {
     | Set<Serializable>
     | Error
     | Transferable
-		| Raw
-		| Encoded;
+    | Raw
+    | Encoded;
 
   export const enum Type {
     RAW,
