@@ -2,7 +2,7 @@ export namespace Wire {
   /**
    * Types that can be serialized through a `postMessage`.
    */
-  export type Serializable =
+  export type Clonable =
     | bigint
     | boolean
     | number
@@ -18,10 +18,10 @@ export namespace Wire {
     | ArrayBufferView
     | ImageBitmap
     | ImageData
-    | Serializable[]
-    | { [name: string]: Serializable }
-    | Map<Serializable, Serializable>
-    | Set<Serializable>
+    | Clonable[]
+    | { [name: string]: Clonable }
+    | Map<Clonable, Clonable>
+    | Set<Clonable>
     | Error
     | Transferable
     | Plain
@@ -40,7 +40,7 @@ export namespace Wire {
    */
   export interface Plain {
     type: Type.PLAIN;
-    value: Serializable;
+    value: Clonable;
   }
 
   /**
@@ -49,7 +49,7 @@ export namespace Wire {
   export interface Encoded {
     type: Type.ENCODED;
     codec: string;
-    value: Serializable;
+    value: Clonable;
   }
 
   export type Value = Plain | Encoded;
@@ -59,7 +59,7 @@ export namespace Wire {
  * This interface is used to support custom encoding and decoding of non-POJO values
  * (like, functions, channels, etc.).
  */
-export interface Codec<E, S extends Wire.Serializable, D> {
+export interface Codec<E, S extends Wire.Clonable, D> {
   canHandle(value: unknown): value is E;
   encode(value: E): [S, Transferable[]];
   decode(value: S): D;
@@ -70,15 +70,15 @@ export interface Codec<E, S extends Wire.Serializable, D> {
  */
 export const codecs = new Map<
   string,
-  Codec<unknown, Wire.Serializable, unknown>
+  Codec<unknown, Wire.Clonable, unknown>
 >();
 
 /**
  * Register a new codec, the name is used as discriminant.
  */
-export function codec<E, S extends Wire.Serializable, D>(
+export function codec<E, C extends Wire.Clonable, D>(
   name: string,
-  codec: Codec<E, S, D>
+  codec: Codec<E, C, D>
 ) {
   codecs.set(name, codec);
   return codec;
