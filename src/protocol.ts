@@ -22,14 +22,14 @@ export namespace Wire {
   export type Value = Raw | Encoded;
 }
 
-export interface Codec<T, S> {
-  canHandle(value: unknown): value is T;
-  encode(value: T): [S, Transferable[]];
-  decode(value: S): T;
+export interface Codec<E, R, D> {
+  canHandle(value: unknown): value is E;
+  encode(value: E): [R, Transferable[]];
+  decode(value: R): D;
 }
 
-export const codecs = new Map<string, Codec<unknown, unknown>>();
-export function codec<T, S>(name: string, codec: Codec<T, S>) {
+export const codecs = new Map<string, Codec<unknown, unknown, unknown>>();
+export function codec<E, R, D>(name: string, codec: Codec<E, R, D>) {
   codecs.set(name, codec);
   return codec;
 }
@@ -43,7 +43,6 @@ export function transfer(value: any, transfer: Transferable[]) {
 export function encode(value: any): [Wire.Value, Transferable[]] {
   for (const [name, codec] of codecs) {
     if (codec.canHandle(value)) {
-			console.log([name, codec]);
       const [encoded, transfer] = codec.encode(value);
       return [{ type: Wire.Type.ENCODED, name, value: encoded }, transfer];
     }
@@ -64,15 +63,3 @@ export function decode(value: Wire.Value): any {
       return (0, eval)("(" + value.value + ")");
   }
 }
-
-codec("FUNCTION", {
-  canHandle: (value): value is Function => value instanceof Function,
-  encode: (value) => [value, []],
-  decode: (value) => value,
-});
-
-codec("EVENT", {
-  canHandle: (value): value is Event => value instanceof Event,
-  encode: (value: Event) => [value, []],
-  decode: (value) => (value as unknown) as Event,
-});

@@ -1,12 +1,10 @@
 {
-    "compilerOptions": {
-      "lib": ["ESNext", "DOM", "WebWorker"],
-      "module": "ESNext",
-      "target": "ESNext",
-      "typeRoots": [
-        "src/types"
-      ]
-    },
-
-    "exclude": ["dist", "node_modules"]
+  "compilerOptions": {
+    "lib": ["ESNext", "DOM", "WebWorker"],
+    "module": "ESNext",
+    "target": "ESNext",
+    "typeRoots": ["src/types"],
+    "moduleResolution": "Node"
+  },
+  "exclude": ["dist", "node_modules"]
 }

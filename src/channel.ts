@@ -77,9 +77,9 @@ export function select<T extends unknown[]>(
   );
 }
 
-codec("CHANNEL", {
+codec("Channel", {
   canHandle: <T>(value: unknown): value is Channel<T> =>
     value instanceof Channel,
-  encode: <T>(channel: Channel<T>) => [channel, [channel.port]],
-  decode: <T>(value: any): Channel<T> => value as Channel<T>,
+  encode: <T>(channel: Channel<T>) => [channel.port, [channel.port]],
+  decode: <T>(value: MessagePort): Channel<T> => new Channel(value)
 });
