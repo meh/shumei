@@ -21,16 +21,16 @@ export namespace Wire {
     | Set<Serializable>
     | Error
     | Transferable
-    | Raw
+    | Plain
     | Encoded;
 
   export const enum Type {
-    RAW,
+    PLAIN,
     ENCODED,
   }
 
-  export interface Raw {
-    type: Type.RAW;
+  export interface Plain {
+    type: Type.PLAIN;
     value: Serializable;
   }
 
@@ -40,7 +40,7 @@ export namespace Wire {
     value: Serializable;
   }
 
-  export type Value = Raw | Encoded;
+  export type Value = Plain | Encoded;
 }
 
 export interface Codec<E, S extends Wire.Serializable, D> {
@@ -79,7 +79,7 @@ export function encode(value: any): [Wire.Value, Transferable[]] {
     }
   }
 
-  return [{ type: Wire.Type.RAW, value: value }, transfers.get(value) || []];
+  return [{ type: Wire.Type.PLAIN, value: value }, transfers.get(value) || []];
 }
 
 export function decode(wire: Wire.Value): any {
@@ -87,7 +87,7 @@ export function decode(wire: Wire.Value): any {
     case Wire.Type.ENCODED:
       return codecs.get(wire.codec)!.decode(wire.value as any);
 
-    case Wire.Type.RAW:
+    case Wire.Type.PLAIN:
       return wire.value;
   }
 }
