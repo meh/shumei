@@ -1,14 +1,14 @@
 import * as _ from "lodash";
-import { Channel, Sender, Receiver } from "./channel";
+import { PortLike, Channel, Sender, Receiver } from "./channel";
 
 /**
  * A mailbox mostly behaves like a channel, but on top of that the messages can
  * be received only when they match a predicate.
  */
-export class Mailbox<T> implements Sender<T>, Receiver<T> {
+export class Mailbox<T, P extends PortLike = MessagePort> implements Sender<T>, Receiver<T> {
   private buffer: Array<T>;
 
-  constructor(private channel: Channel<T>) {
+  constructor(private channel: Channel<T, P>) {
     if (!((channel as any) instanceof Channel)) {
       debugger;
     }
