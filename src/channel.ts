@@ -1,5 +1,5 @@
 import asyncify from "callback-to-async-iterator";
-import { codec, encode, decode } from "./protocol";
+import * as wire  from "./wire";
 
 /**
  * Anything that behaves like a `MessagePort`.
@@ -39,7 +39,7 @@ export class Channel<T, P extends PortLike = MessagePort>
     this.iter = asyncify(
       (next) =>
         new Promise((_, reject) => {
-          port.onmessage = (e: MessageEvent) => next(decode(e.data));
+          port.onmessage = (e: MessageEvent) => next(wire.decode(e.data));
           port.onmessageerror = (e: MessageEvent) => reject(e.data);
         })
     );
@@ -50,7 +50,7 @@ export class Channel<T, P extends PortLike = MessagePort>
   }
 
   send(value: T) {
-    const [message, transfer] = encode(value);
+    const [message, transfer] = wire.encode(value);
     this.port.postMessage(message, transfer);
   }
 
@@ -101,7 +101,7 @@ export function select<T extends unknown[]>(
   );
 }
 
-codec("Channel", {
+wire.codec("Channel", {
   canHandle: <T>(value: unknown): value is Channel<T> =>
     value instanceof Channel,
   encode: <T>(channel: Channel<T>) => [channel.port, [channel.port]],

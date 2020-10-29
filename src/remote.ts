@@ -1,6 +1,6 @@
 import { v4 as uuid } from "uuid";
 import * as _ from "lodash";
-import { Wire, codec, transfer, encode, decode } from "./protocol";
+import * as wire from "./wire";
 import { Channel, pair as mkChannelPair } from "./channel";
 import { Mailbox } from "./mailbox";
 
@@ -19,13 +19,13 @@ namespace Message {
     export interface Request {
       id: ID;
       type: Type.CONSTRUCT;
-      arguments: Wire.Value[];
+      arguments: wire.Value[];
     }
 
     export interface Response {
       id: ID;
       type: Type.CONSTRUCT;
-      value: Wire.Value;
+      value: wire.Value;
     }
   }
 
@@ -33,13 +33,13 @@ namespace Message {
     export interface Request {
       id: ID;
       type: Type.APPLY;
-      arguments: Wire.Value[];
+      arguments: wire.Value[];
     }
 
     export interface Response {
       id: ID;
       type: Type.APPLY;
-      value: Wire.Value;
+      value: wire.Value;
     }
   }
 
@@ -53,7 +53,7 @@ namespace Message {
     export interface Response {
       id: ID;
       type: Type.GET;
-      value: Wire.Value;
+      value: wire.Value;
     }
   }
 
@@ -62,7 +62,7 @@ namespace Message {
       id: ID;
       type: Type.SET;
       prop: PropertyKey;
-      value: Wire.Value;
+      value: wire.Value;
     }
 
     export interface Response {
@@ -106,14 +106,14 @@ export namespace Thrown {
 
   export interface Value {
     [MARKER]: true;
-    value: Wire.Clonable;
+    value: wire.Clonable;
   }
 
   export type Encoded =
     | { isError: true; value: Error }
-    | { isError: false; value: Wire.Clonable };
+    | { isError: false; value: wire.Clonable };
 
-  codec("throw", {
+  wire.codec("throw", {
     canHandle: (value: any): value is Value =>
       _.isObject(value) && MARKER in value,
 
@@ -182,7 +182,7 @@ export namespace Local {
    */
   export type AsValue<T> = T extends Remote.Object<Marked>
     ? Value<T>
-    : T extends Wire.Clonable
+    : T extends wire.Clonable
     ? T
     : never;
 
@@ -224,7 +224,7 @@ export namespace Remote {
    */
   export type AsValue<T> = T extends Marked
     ? Value<T>
-    : T extends Wire.Clonable
+    : T extends wire.Clonable
     ? T
     : never;
 
@@ -268,7 +268,7 @@ export function remote<T>(channel: Channel<Message.Any>): Remote.Value<T> {
   const encodeAll = (args: any) => _.reduce(
     args,
     ([args, transferable], val: any) => {
-      const [arg, transfer] = encode(val);
+      const [arg, transfer] = wire.encode(val);
       return [
         [...args, arg],
         [...transferable, ...transfer],
@@ -343,7 +343,7 @@ export function remote<T>(channel: Channel<Message.Any>): Remote.Value<T> {
 
     set(_target: any, p: PropertyKey, value: any, _receiver: any): boolean {
       const id = uuid();
-      const [encoded, transferable] = encode(value);
+      const [encoded, transferable] = wire.encode(value);
 
       const message = <Message.Set.Request>{
         id,
@@ -386,7 +386,7 @@ export function spawn(value: any): Channel<Message.Any> {
         case Message.Type.CONSTRUCT:
           {
             const request = msg as Message.Construct.Request;
-            const [encoded, transferable] = encode(
+            const [encoded, transferable] = wire.encode(
               Reflect.construct(value, request.arguments)
             );
 
@@ -404,7 +404,7 @@ export function spawn(value: any): Channel<Message.Any> {
         case Message.Type.APPLY:
           {
             const request = msg as Message.Apply.Request;
-            const [encoded, transferable] = encode(
+            const [encoded, transferable] = wire.encode(
               Reflect.apply(value, undefined, request.arguments)
             );
 
@@ -422,7 +422,7 @@ export function spawn(value: any): Channel<Message.Any> {
         case Message.Type.GET:
           {
             const request = msg as Message.Get.Request;
-            const [encoded, transferable] = encode(
+            const [encoded, transferable] = wire.encode(
               Reflect.get(value, request.prop)
             );
 
@@ -474,15 +474,15 @@ export function spawn(value: any): Channel<Message.Any> {
   return slave;
 }
 
-codec("Function", {
+wire.codec("Function", {
   canHandle: (value: unknown): value is Function => _.isFunction(value),
-  encode: (value) => encode(spawn(value)),
-  decode: (value: any): Remote.Value<Function> => remote(decode(value)),
+  encode: (value) => wire.encode(spawn(value)),
+  decode: (value: any): Remote.Value<Function> => remote(wire.decode(value)),
 });
 
-codec("Remote", {
+wire.codec("Remote", {
   canHandle: (value: unknown): value is Marked =>
     _.isObject(value) && (value as Marked)[MARKER],
-  encode: (value) => encode(spawn(value)),
-  decode: <T>(value: any): Remote.Value<T> => remote(decode(value)),
+  encode: (value) => wire.encode(spawn(value)),
+  decode: <T>(value: any): Remote.Value<T> => remote(wire.decode(value)),
 });

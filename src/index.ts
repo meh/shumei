@@ -1,4 +1,4 @@
-export * as protocol from './protocol';
+export * as wire from './wire';
 export * as channel from './channel';
 export * as worker from './worker';
 export * as remote from './remote';
