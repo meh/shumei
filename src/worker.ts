@@ -29,20 +29,29 @@ export function shared<T>(source: URL | string): Shared<T> {
   return new Shared(new SharedWorker(source.toString()));
 }
 
+/**
+ * Get a channel for the current `Worker`.
+ *
+ * This function can only be called once per worker.
+ */
 export function channel<T>(): Channel<T, DedicatedWorkerGlobalScope> {
   return new Channel((self as unknown) as DedicatedWorkerGlobalScope);
 }
 
+/**
+ * Get an iterator of channels for the current `SharedWorker`.
+ *
+ * This function can only be called once per worker.
+ */
 export function channels<T>(): AsyncIterator<Channel<T>> {
   return asyncify(
     (next) =>
-      new Promise(
-        () =>
-          (((self as unknown) as SharedWorkerGlobalScope).onconnect = (e) => {
-            for (const port of e.ports) {
-              next(new Channel(port));
-            }
-          })
+      new Promise(() =>
+        self.addEventListener("connect", (e) => {
+          for (const port of e.ports) {
+            next(new Channel(port));
+          }
+        })
       )
   );
 }
