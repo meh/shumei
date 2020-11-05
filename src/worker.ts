@@ -1,18 +1,11 @@
-import asyncify from "callback-to-async-iterator";
-import { Channel } from "./channel";
+import * as _ from 'lodash';
+import * as queueable from 'queueable';
+import { Channel } from './channel';
 
 export class Dedicated<T> extends Channel<T, Worker> {
   constructor(public worker: Worker) {
     super(worker);
   }
-}
-
-export function dedicated<T>(source: URL | string): Dedicated<T> {
-  if (!(source instanceof URL)) {
-    source = URL.createObjectURL(new Blob([source]));
-  }
-
-  return new Dedicated(new Worker(source));
 }
 
 export class Shared<T> extends Channel<T> {
@@ -21,7 +14,25 @@ export class Shared<T> extends Channel<T> {
   }
 }
 
+/**
+* Spawn a dedicated worker.
+*/
+export function dedicated<T>(source: URL | string): Dedicated<T> {
+  if (!(source instanceof URL)) {
+    source = URL.createObjectURL(new Blob([source]));
+  }
+
+  return new Dedicated(new Worker(source));
+}
+
+/**
+* Spawn a shared worker.
+*/
 export function shared<T>(source: URL | string): Shared<T> {
+  if (!isTab(self)) {
+    throw new Error('this function can only be called in a `Window`.');
+  }
+
   if (!(source instanceof URL)) {
     source = URL.createObjectURL(new Blob([source]));
   }
@@ -35,7 +46,11 @@ export function shared<T>(source: URL | string): Shared<T> {
  * This function can only be called once per worker.
  */
 export function channel<T>(): Channel<T, DedicatedWorkerGlobalScope> {
-  return new Channel((self as unknown) as DedicatedWorkerGlobalScope);
+  if (!isDedicated(self)) {
+    throw new Error('this function can only be called in a `Worker`.');
+  }
+
+  return new Channel(self);
 }
 
 /**
@@ -43,15 +58,45 @@ export function channel<T>(): Channel<T, DedicatedWorkerGlobalScope> {
  *
  * This function can only be called once per worker.
  */
-export function channels<T>(): AsyncIterator<Channel<T>> {
-  return asyncify(
-    (next) =>
-      new Promise(() =>
-        self.addEventListener("connect", (e) => {
-          for (const port of e.ports) {
-            next(new Channel(port));
-          }
-        })
-      )
+export function channels<T>(): AsyncIterableIterator<Channel<T>> {
+  if (!isShared(self)) {
+    throw new Error('this function can only be called in a `SharedWorker`.');
+  }
+
+  const channel = new queueable.Channel<Channel<T>>();
+
+  self.addEventListener('connect', e => {
+    for (const port of e.ports) {
+      channel.push(new Channel(port));
+    }
+  });
+
+  return channel.wrap();
+}
+
+/**
+* Check whether the passed value is a tab or not.
+*/
+export function isTab(self: unknown): self is Window {
+  return _.isFunction(self['Window']) && self instanceof self['Window'];
+}
+
+/**
+* Check whether the passed value is a dedicated worker or not.
+*/
+export function isDedicated(self: unknown): self is DedicatedWorkerGlobalScope {
+  return (
+    _.isFunction(self['DedicatedWorkerGlobalScope']) &&
+    self instanceof self['DedicatedWorkerGlobalScope']
+  );
+}
+
+/**
+* Check whether the passed value is a shared worker or not.
+*/
+export function isShared(self: unknown): self is SharedWorkerGlobalScope {
+  return (
+    _.isFunction(self['SharedWorkerGlobalScope']) &&
+    self instanceof self['SharedWorkerGlobalScope']
   );
 }

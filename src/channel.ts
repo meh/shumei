@@ -1,5 +1,5 @@
-import asyncify from "callback-to-async-iterator";
-import * as wire  from "./wire";
+import * as queueable from 'queueable';
+import * as wire from './wire';
 
 /**
  * Anything that behaves like a `MessagePort`.
@@ -16,6 +16,8 @@ export interface PortLike {
  */
 export interface Receiver<T> {
   recv(): Promise<T>;
+  [Symbol.asyncIterator](): AsyncIterator<T>;
+  close?(): void;
 }
 
 /**
@@ -23,6 +25,7 @@ export interface Receiver<T> {
  */
 export interface Sender<T> {
   send(value: T): void;
+  close?(): void;
 }
 
 /**
@@ -33,16 +36,14 @@ export interface Sender<T> {
  */
 export class Channel<T, P extends PortLike = MessagePort>
   implements Sender<T>, Receiver<T> {
+  protected channel: queueable.Channel<T>;
   protected iter: AsyncIterator<T>;
 
   constructor(public port: P) {
-    this.iter = asyncify(
-      (next) =>
-        new Promise((_, reject) => {
-          port.onmessage = (e: MessageEvent) => next(wire.decode(e.data));
-          port.onmessageerror = (e: MessageEvent) => reject(e.data);
-        })
-    );
+    const channel = (this.channel = new queueable.Channel());
+    port.onmessage = (e: MessageEvent) => channel.push(wire.decode(e.data));
+    port.onmessageerror = (e: MessageEvent) => channel.return(e.data);
+    this.iter = channel.wrap(() => port.close());
   }
 
   [Symbol.asyncIterator](): AsyncIterator<T> {
@@ -59,7 +60,7 @@ export class Channel<T, P extends PortLike = MessagePort>
   }
 
   close() {
-    this.port.close();
+    this.channel.return();
   }
 }
 
@@ -79,29 +80,90 @@ export function broadcast<T>(name: string): Channel<T, BroadcastChannel> {
 }
 
 /**
- * Create an `AsyncIterator` that can receive messages from multiple channels.
+ * Convert a `queueable.Channel` into one of our own.
  */
-export function select<T extends unknown[]>(
-  ...channels: Channel<T>[]
-): AsyncIterator<{ channel: Channel<T>; value: T }> {
-  return asyncify(
-    (next) =>
-      new Promise((_) => {
-        const recv = (channel: Channel<T>) => {
-          channel.recv().then((value) => {
-            next({ channel, value });
-            recv(channel);
-          });
-        };
+export function fromQueuable<T>(
+  channel: queueable.Channel<T> = new queueable.Channel<T>()
+): Sender<T> & Receiver<T> {
+  return {
+    send(value: T) {
+      channel.push(value);
+    },
 
-        for (const channel of channels) {
-          recv(channel);
-        }
-      })
-  );
+    async recv(): Promise<T> {
+      return (await channel.next()).value;
+    },
+
+    [Symbol.asyncIterator](): AsyncIterator<T> {
+      return channel[Symbol.asyncIterator]();
+    },
+  };
 }
 
-wire.codec("Channel", {
+export type Select<T, R = any> = {
+  channel: R;
+  value: T;
+};
+
+/**
+ * Create an `AsyncIterator` that can receive messages from multiple channels.
+ */
+export function select<T extends unknown[], R extends Receiver<T>>(
+  ...channels: R[]
+): Receiver<Select<T, R>> {
+  const channel = new queueable.Channel<Select<T, R>>();
+
+  for (const ch of channels) {
+    (async () => {
+      for await (const value of ch) {
+        channel.push({ channel: ch, value });
+      }
+    })();
+  }
+
+  const iter = channel.wrap(() => {
+    for (const ch of channels) {
+      ch.close();
+    }
+  });
+
+  return {
+    [Symbol.asyncIterator](): AsyncIterator<Select<T, R>> {
+      return iter;
+    },
+
+    async recv(): Promise<Select<T, R>> {
+      return (await channel.next()).value;
+    },
+
+    close() {
+      channel.close();
+    },
+  };
+}
+
+/**
+ * Create an object that sends the same message to multiple channels.
+ */
+export function multicast<T extends unknown[]>(
+  ...channels: Sender<T>[]
+): Sender<T> {
+  return {
+    send(value: T): void {
+      for (const ch of channels) {
+        ch.send(value);
+      }
+    },
+
+    close() {
+      for (const ch of channels) {
+        ch.close();
+      }
+    },
+  };
+}
+
+wire.codec('Channel', {
   canHandle: <T>(value: unknown): value is Channel<T> =>
     value instanceof Channel,
   encode: <T>(channel: Channel<T>) => [channel.port, [channel.port]],

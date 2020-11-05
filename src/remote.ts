@@ -1,9 +1,12 @@
-import { v4 as uuid } from "uuid";
-import * as _ from "lodash";
-import * as wire from "./wire";
-import { Channel, pair as mkChannelPair } from "./channel";
-import { Mailbox } from "./mailbox";
+import { v4 as uuid } from 'uuid';
+import * as _ from 'lodash';
+import * as wire from './wire';
+import { Channel, pair as mkChannelPair } from './channel';
+import { Mailbox } from './mailbox';
 
+/**
+ * Messages for the remote value protocol.
+ */
 namespace Message {
   export type ID = string;
 
@@ -15,75 +18,93 @@ namespace Message {
     DELETE,
   }
 
+  /**
+   * Equivalent of `Proxy.construct`.
+   */
   export namespace Construct {
-    export interface Request {
+    export type Request = {
       id: ID;
       type: Type.CONSTRUCT;
       arguments: wire.Value[];
-    }
+    };
 
-    export interface Response {
+    export type Response = {
       id: ID;
       type: Type.CONSTRUCT;
       value: wire.Value;
-    }
+    };
   }
 
+  /**
+   * Equivalent of `Proxy.apply`.
+   */
   export namespace Apply {
-    export interface Request {
+    export type Request = {
       id: ID;
       type: Type.APPLY;
       arguments: wire.Value[];
-    }
+    };
 
-    export interface Response {
+    export type Response = {
       id: ID;
       type: Type.APPLY;
       value: wire.Value;
-    }
+    };
   }
 
+  /**
+   * Equivalent of `Proxy.get`.
+   */
   export namespace Get {
-    export interface Request {
+    export type Request = {
       id: ID;
       type: Type.GET;
       prop: PropertyKey;
-    }
+    };
 
-    export interface Response {
+    export type Response = {
       id: ID;
       type: Type.GET;
       value: wire.Value;
-    }
+    };
   }
 
+  /**
+   * Equivalent of `Proxy.set`.
+   */
   export namespace Set {
-    export interface Request {
+    export type Request = {
       id: ID;
       type: Type.SET;
       prop: PropertyKey;
       value: wire.Value;
-    }
+    };
 
-    export interface Response {
+    export type Response = {
       id: ID;
       type: Type.SET;
-    }
+    };
   }
 
+  /**
+   * Equivalent of `Proxy.delete`.
+   */
   export namespace Delete {
-    export interface Request {
+    export type Request = {
       id: ID;
       type: Type.DELETE;
       prop: PropertyKey;
-    }
+    };
 
-    export interface Response {
+    export type Response = {
       id: ID;
       type: Type.DELETE;
-    }
+    };
   }
 
+  /**
+   * Any request message.
+   */
   export type Request =
     | Construct.Request
     | Apply.Request
@@ -91,6 +112,9 @@ namespace Message {
     | Set.Request
     | Delete.Request;
 
+  /**
+   * Any response message.
+   */
   export type Response =
     | Construct.Response
     | Apply.Response
@@ -98,11 +122,14 @@ namespace Message {
     | Set.Response
     | Delete.Response;
 
+  /**
+   * Any message.
+   */
   export type Any = Request | Response;
 }
 
 export namespace Thrown {
-  const MARKER = Symbol("shumei.thrown");
+  const MARKER = Symbol('shumei.thrown');
 
   export interface Value {
     [MARKER]: true;
@@ -113,7 +140,7 @@ export namespace Thrown {
     | { isError: true; value: Error }
     | { isError: false; value: wire.Clonable };
 
-  wire.codec("throw", {
+  wire.codec('throw', {
     canHandle: (value: any): value is Value =>
       _.isObject(value) && MARKER in value,
 
@@ -145,7 +172,7 @@ export namespace Thrown {
   });
 }
 
-const MARKER = Symbol("shumei.remote");
+const MARKER = Symbol('shumei.remote');
 
 /**
  * A value marked as remote.
@@ -264,23 +291,28 @@ export namespace Remote {
  * A remotely accessible value.
  */
 export function remote<T>(channel: Channel<Message.Any>): Remote.Value<T> {
-  const mbox = new Mailbox(channel);
-  const encodeAll = (args: any) => _.reduce(
-    args,
-    ([args, transferable], val: any) => {
-      const [arg, transfer] = wire.encode(val);
-      return [
-        [...args, arg],
-        [...transferable, ...transfer],
-      ];
-    },
-    [[], []]
-  );
+  const mbox = new Mailbox().handle(channel);
+  const encodeAll = (args: any) =>
+    _.reduce(
+      args,
+      ([args, transferable], val: any) => {
+        const [arg, transfer] = wire.encode(val);
+        return [
+          [...args, arg],
+          [...transferable, ...transfer],
+        ];
+      },
+      [[], []]
+    );
 
   // XXX(meh): If the `target` is not a function then `apply` won't be called,
   //           and we need that.
   return new Proxy(() => {}, {
-    async construct(_target: any, argArray: any, _newTarget?: any): Promise<object> {
+    async construct(
+      _target: any,
+      argArray: any,
+      _newTarget?: any
+    ): Promise<object> {
       const id = uuid();
       const [args, transferable] = encodeAll(argArray);
       const message = <Message.Construct.Request>{
@@ -289,7 +321,7 @@ export function remote<T>(channel: Channel<Message.Any>): Remote.Value<T> {
         arguments: args,
       };
 
-      transfer(message, transferable);
+      wire.transfer(message, transferable);
       mbox.send(message);
 
       const response = (await mbox.match(
@@ -308,7 +340,7 @@ export function remote<T>(channel: Channel<Message.Any>): Remote.Value<T> {
         arguments: args,
       };
 
-      transfer(message, transferable);
+      wire.transfer(message, transferable);
       mbox.send(message);
 
       const response = (await mbox.match(
@@ -321,7 +353,7 @@ export function remote<T>(channel: Channel<Message.Any>): Remote.Value<T> {
     async get(_target: any, p: PropertyKey, _receiver: any): Promise<any> {
       // XXX(meh): When a `Proxy` is awaited "then" is requested, this should return a value
       //           with a `then` property or it's going to lead to infinite recursion.
-      if (p == "then") {
+      if (p == 'then') {
         return Promise.resolve(this);
       }
 
@@ -352,7 +384,7 @@ export function remote<T>(channel: Channel<Message.Any>): Remote.Value<T> {
         value: encoded,
       };
 
-      transfer(message, transferable);
+      wire.transfer(message, transferable);
       mbox.send(message);
       mbox.match((msg: Message.Any) => msg.id == id);
 
@@ -381,7 +413,7 @@ export function remote<T>(channel: Channel<Message.Any>): Remote.Value<T> {
 export function spawn(value: any): Channel<Message.Any> {
   const [master, slave] = mkChannelPair<Message.Any>();
   const handle = (channel: Channel<Message.Any>) => {
-    channel.recv().then((msg) => {
+    channel.recv().then(msg => {
       switch (msg.type) {
         case Message.Type.CONSTRUCT:
           {
@@ -396,7 +428,7 @@ export function spawn(value: any): Channel<Message.Any> {
               value: encoded,
             };
 
-            transfer(message, transferable);
+            wire.transfer(message, transferable);
             master.send(message);
           }
           break;
@@ -414,7 +446,7 @@ export function spawn(value: any): Channel<Message.Any> {
               value: encoded,
             };
 
-            transfer(message, transferable);
+            wire.transfer(message, transferable);
             master.send(message);
           }
           break;
@@ -432,7 +464,7 @@ export function spawn(value: any): Channel<Message.Any> {
               value: encoded,
             };
 
-            transfer(message, transferable);
+            wire.transfer(message, transferable);
             master.send(message);
           }
           break;
@@ -474,15 +506,15 @@ export function spawn(value: any): Channel<Message.Any> {
   return slave;
 }
 
-wire.codec("Function", {
+wire.codec('Function', {
   canHandle: (value: unknown): value is Function => _.isFunction(value),
-  encode: (value) => wire.encode(spawn(value)),
+  encode: value => wire.encode(spawn(value)),
   decode: (value: any): Remote.Value<Function> => remote(wire.decode(value)),
 });
 
-wire.codec("Remote", {
+wire.codec('Remote', {
   canHandle: (value: unknown): value is Marked =>
     _.isObject(value) && (value as Marked)[MARKER],
-  encode: (value) => wire.encode(spawn(value)),
+  encode: value => wire.encode(spawn(value)),
   decode: <T>(value: any): Remote.Value<T> => remote(wire.decode(value)),
 });
