@@ -22,9 +22,7 @@ export type Clonable =
   | Map<Clonable, Clonable>
   | Set<Clonable>
   | Error
-  | Transferable
-  | Plain
-  | Encoded;
+  | Transferable;
 
 /**
  * The type of packet.
@@ -37,19 +35,19 @@ export const enum Type {
 /**
  * Values that do not need any encoding.
  */
-export interface Plain {
+export type Plain = {
   type: Type.PLAIN;
   value: Clonable;
-}
+};
 
 /**
  * Values that have been encoded with special handling.
  */
-export interface Encoded {
+export type Encoded = {
   type: Type.ENCODED;
   codec: string;
   value: Clonable;
-}
+};
 
 export type Value = Plain | Encoded;
 
@@ -66,10 +64,7 @@ export interface Codec<E, S extends Clonable, D> {
 /**
  * Map of registered codecs.
  */
-export const codecs = new Map<
-  string,
-  Codec<unknown, Clonable, unknown>
->();
+export const codecs = new Map<string, Codec<unknown, Clonable, unknown>>();
 
 /**
  * Register a new codec, the name is used as discriminant.
@@ -102,10 +97,7 @@ export function encode(value: any): [Value, Transferable[]] {
   for (const [name, codec] of codecs) {
     if (codec.canHandle(value)) {
       const [encoded, transfer] = codec.encode(value);
-      return [
-        { type: Type.ENCODED, codec: name, value: encoded },
-        transfer,
-      ];
+      return [{ type: Type.ENCODED, codec: name, value: encoded }, transfer];
     }
   }
 
