@@ -7,22 +7,28 @@ import { Sender, Receiver } from './channel';
 import * as channel from './channel';
 import { Mailbox, FilterFn } from './mailbox';
 
+/**
+* A value that can be used to spawn a new actor.
+*/
 export interface Spawn<T> {
 	(self?: Actor<T>): AsyncGenerator<FilterFn<T> | undefined, any, T>;
 }
 
 /**
- * A stage runs multiple actors.
+ * A stage is an environment that can run actors.
  */
 export interface Stage extends Sender<Message.Any> {
 	id: string;
 }
 
-export type Handle = {
+/**
+* The fully qualified address for an actor.
+*/
+export type Address = {
 	/**
 	 * UUID of the actor.
 	 */
-	id: string;
+	actor: string;
 
 	/**
 	 * UUID of the stage.
@@ -37,74 +43,7 @@ export interface Actor<T> extends Sender<T> {
 	/**
 	 * The full handle for this actor.
 	 */
-	handle: Handle;
-}
-
-/**
- * The protocol spoken between stages.
- */
-export namespace Message {
-	export type ID = string;
-
-	export const enum Type {
-		STAGE,
-		WHOIS_ACTOR,
-		ACTOR,
-		SEND,
-	}
-
-	/**
-	 * Ask a stage to identify itself.
-	 */
-	export type Stage = {
-		type: Type.STAGE;
-		stage: ID;
-	};
-
-	export function isStage(msg: any): msg is Stage {
-		return msg.type == Type.STAGE;
-	}
-
-	/**
-	 * Ask a stage to fully qualify an actor.
-	 */
-	export type WhoisActor = {
-		id: ID;
-		type: Type.WHOIS_ACTOR;
-		whois: ID;
-	};
-
-	export function isWhoisActor(msg: any): msg is WhoisActor {
-		return msg.type == Type.WHOIS_ACTOR && _.isString(msg.whois);
-	}
-
-	export type Actor = {
-		id: ID;
-		type: Type.ACTOR;
-		actor: Handle;
-	};
-
-	export function isActor(msg: any): msg is Actor {
-		return msg.type == Type.ACTOR && _.isObject(msg.actor);
-	}
-
-	/**
-	 * Send a message to a specific actor.
-	 *
-	 * The message is internally forwarded to the proper stage or all stages.
-	 */
-	export type Send = {
-		id: ID;
-		type: Type.SEND;
-		actor: Handle;
-		message: any;
-	};
-
-	export function isSend(msg: any): msg is Request {
-		return msg.type == Type.SEND && _.isObject(msg['actor']);
-	}
-
-	export type Any = Stage | WhoisActor | Actor | Send;
+	address: Address;
 }
 
 export class Live {
@@ -152,6 +91,9 @@ export class Live {
 		}
 	}
 
+	/**
+	* Mark the stage as ready.
+	*/
 	ready(parent?: string): void {
 		if (parent) {
 			if (this.isReady) {
@@ -207,7 +149,7 @@ export class Live {
 
 	// This whole blob basically just internally responds to the ARP-like messages
 	// (STAGE and ACTOR) and broadcasts all SENDs that don't belong to this stage.
-	async handle(
+	private async handle(
 		channel: Sender<Message.Any>,
 		msg: Message.WhoisActor | Message.Send
 	): Promise<void> {
@@ -217,7 +159,7 @@ export class Live {
 				return channel.send({
 					id: msg.id,
 					type: Message.Type.ACTOR,
-					actor: { id: alias, stage: this.id },
+					actor: { actor: alias, stage: this.id },
 				});
 			}
 
@@ -226,7 +168,7 @@ export class Live {
 				return channel.send({
 					id: msg.id,
 					type: Message.Type.ACTOR,
-					actor: act.handle,
+					actor: act.address,
 				});
 			}
 
@@ -237,12 +179,12 @@ export class Live {
 
 		// Forward or broadcast the message if it's not for us, otherwise accept it.
 		if (Message.isSend(msg)) {
-			if (msg.actor.stage == this.id) {
-				return this.actors.get(msg.actor.id)!.send(msg.message);
+			if (msg.to.stage == this.id) {
+				return this.actors.get(msg.to.actor)!.send(msg.message);
 			}
 
-			if (this.stages.has(msg.actor.stage)) {
-				return this.stages.get(msg.actor.stage)!.instance.send(msg);
+			if (this.stages.has(msg.to.stage)) {
+				return this.stages.get(msg.to.stage)!.instance.send(msg);
 			}
 
 			// XXX(meh): This is likely going to break with shared workers, need that LRU.
@@ -302,13 +244,13 @@ export class Live {
 
 	spawn<T>(fn: Spawn<T>): Actor<T> {
 		const act = new LocalActor(fn);
-		this.actors.set(act.handle.id, act);
+		this.actors.set(act.address.actor, act);
 		return act;
 	}
 
 	register<T>(name: string, fn: Spawn<T> | LocalActor<T>): Actor<T> {
 		const act = fn instanceof LocalActor ? fn : this.spawn(fn);
-		this.names.set(name, act.handle.id);
+		this.names.set(name, act.address.actor);
 		return act;
 	}
 }
@@ -361,17 +303,17 @@ export async function register<T>(
 }
 
 export class RemoteActor<T> implements Actor<T> {
-	constructor(public handle: Handle) {}
+	constructor(public address: Address) {}
 
 	async send(msg: T): Promise<void> {
-		if (self[LIVE].id === this.handle.stage) {
-			return (await self[LIVE].actor<T>(this.handle.id)).send(msg);
+		if (self[LIVE].id === this.address.stage) {
+			return (await self[LIVE].actor<T>(this.address.actor)).send(msg);
 		}
 
 		self[LIVE].send(<Message.Send>{
 			id: uuid(),
 			type: Message.Type.SEND,
-			actor: this.handle,
+			to: this.address,
 			message: msg,
 		});
 	}
@@ -389,7 +331,7 @@ export class LocalActor<T> implements Actor<T> {
 
 		// Call the generator function with a reference to self.
 		const iter = spawn(
-			new RemoteActor<T>({ id: this.id, stage: self[LIVE].id })
+			new RemoteActor<T>({ actor: this.id, stage: self[LIVE].id })
 		);
 
 		// Promise-oriented handling of a local actor, this gets spawned onto the event-loop.
@@ -411,8 +353,8 @@ export class LocalActor<T> implements Actor<T> {
 		handle(iter);
 	}
 
-	get handle() {
-		return { stage: self[LIVE].id, id: this.id };
+	get address() {
+		return { stage: self[LIVE].id, actor: this.id };
 	}
 
 	async send(msg: T): Promise<void> {
@@ -425,6 +367,73 @@ wire.codec('Actor<T>', {
 		_.isObject(value) &&
 		_.isObject(value['handle']) &&
 		_.isFunction(value['send']),
-	encode: <T>(value: Actor<T>) => [value.handle, []],
-	decode: <T>(value: Handle): Actor<T> => new RemoteActor(value),
+	encode: <T>(value: Actor<T>) => [value.address, []],
+	decode: <T>(value: Address): Actor<T> => new RemoteActor(value),
 });
+
+/**
+ * The protocol spoken between stages.
+ */
+export namespace Message {
+	export type ID = string;
+
+	export const enum Type {
+		STAGE,
+		WHOIS_ACTOR,
+		ACTOR,
+		SEND,
+	}
+
+	/**
+	 * Ask a stage to identify itself.
+	 */
+	export type Stage = {
+		type: Type.STAGE;
+		stage: ID;
+	};
+
+	export function isStage(msg: any): msg is Stage {
+		return msg.type == Type.STAGE;
+	}
+
+	/**
+	 * Ask a stage to fully qualify an actor.
+	 */
+	export type WhoisActor = {
+		id: ID;
+		type: Type.WHOIS_ACTOR;
+		whois: ID;
+	};
+
+	export function isWhoisActor(msg: any): msg is WhoisActor {
+		return msg.type == Type.WHOIS_ACTOR && _.isString(msg.whois);
+	}
+
+	export type Actor = {
+		id: ID;
+		type: Type.ACTOR;
+		actor: Address;
+	};
+
+	export function isActor(msg: any): msg is Actor {
+		return msg.type == Type.ACTOR && _.isObject(msg.actor);
+	}
+
+	/**
+	 * Send a message to a specific actor.
+	 *
+	 * The message is internally forwarded to the proper stage or all stages.
+	 */
+	export type Send = {
+		id: ID;
+		type: Type.SEND;
+		to: Address;
+		message: any;
+	};
+
+	export function isSend(msg: any): msg is Request {
+		return msg.type == Type.SEND && _.isObject(msg['actor']);
+	}
+
+	export type Any = Stage | WhoisActor | Actor | Send;
+}
