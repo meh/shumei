@@ -291,7 +291,7 @@ export namespace Remote {
  * A remotely accessible value.
  */
 export function remote<T>(channel: Channel<Message.Any>): Remote.Value<T> {
-	const mbox = new Mailbox().handle(channel);
+	const mbox = new Mailbox(channel);
 	const encodeAll = (args: any) =>
 		_.reduce(
 			args,

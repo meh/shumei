@@ -145,8 +145,8 @@ export function select<T extends unknown[], R extends Receiver<T>>(
 /**
  * Create an object that sends the same message to multiple channels.
  */
-export function multicast<T extends unknown[]>(
-	...channels: Sender<T>[]
+export function multicast<T extends unknown[], S extends Sender<T>>(
+	...channels: S[]
 ): Sender<T> {
 	return {
 		send(value: T): void {
