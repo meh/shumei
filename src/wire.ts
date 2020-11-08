@@ -1,3 +1,5 @@
+import * as _ from 'lodash';
+
 /**
  * Types that can be serialized through a `postMessage`.
  */
@@ -101,7 +103,27 @@ export function encode(value: any): [Value, Transferable[]] {
 		}
 	}
 
-	return [{ type: Type.PLAIN, value: value }, transfers.get(value) || []];
+	let encoding = value;
+	const transferable = transfers.get(value) || [];
+
+	if (_.isObject(value)) {
+		encoding = {};
+		for (const [k, v] of Object.entries(value)) {
+			const [encoded, transfers] = encode(v);
+			encoding[k] = encoded;
+			transferable.push(...transfers);
+		}
+	}
+	else if (_.isArray(value)) {
+		encoding = [];
+		for (const v of value) {
+			const [encoded, transfers] = encode(v);
+			encoding.push(encoded);
+			transferable.push(...transfers);
+		}
+	}
+
+	return [{ type: Type.PLAIN, value: encoding }, transferable];
 }
 
 /**
@@ -113,6 +135,21 @@ export function decode(wire: Value): any {
 			return codecs.get(wire.codec)!.decode(wire.value as any);
 
 		case Type.PLAIN:
-			return wire.value;
+			let decoding = wire.value;
+
+			if (_.isObject(wire.value)) {
+				decoding = {};
+				for (const [k, v] of Object.entries(wire.value)) {
+					decoding[k] = decode(v);
+				}
+			}
+			else if (_.isArray(wire.value)) {
+				decoding = [];
+				for (const v of wire.value) {
+					decoding.push(decode(v));
+				}
+			}
+
+			return decoding;
 	}
 }
