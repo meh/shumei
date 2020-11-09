@@ -1,5 +1,5 @@
 import * as _ from 'lodash';
-import * as queueable from 'queueable';
+import { Channel as Queue } from 'queueable';
 import { Channel } from './channel';
 
 export class Dedicated<T> extends Channel<T, Worker> {
@@ -63,7 +63,7 @@ export function channels<T>(): AsyncIterableIterator<Channel<T>> {
 		throw new Error('this function can only be called in a `SharedWorker`.');
 	}
 
-	const channel = new queueable.Channel<Channel<T>>();
+	const channel = new Queue<Channel<T>>();
 
 	self.addEventListener('connect', e => {
 		for (const port of e.ports) {

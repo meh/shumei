@@ -1,5 +1,5 @@
 import * as _ from 'lodash';
-import * as queueable from 'queueable';
+import { Deferred } from 'queueable';
 import * as channel from './channel';
 
 export interface FilterFn<T> {
@@ -44,14 +44,13 @@ export class Mailbox<T> implements Sender<T>, Receiver<T> {
 			}
 		}
 
-		const result = new queueable.Deferred<T>();
+		const result = new Deferred<T>();
 		const handle = async (channel: channel.Receiver<T>) => {
 			const msg = await channel.recv();
 
 			if (pred(msg)) {
 				result.resolve(msg);
-			}
-			else {
+			} else {
 				this.buffer.push(msg);
 				return handle(channel);
 			}

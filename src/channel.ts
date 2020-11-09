@@ -1,4 +1,4 @@
-import * as queueable from 'queueable';
+import { Channel as Queue } from 'queueable';
 import * as wire from './wire';
 
 /**
@@ -36,14 +36,14 @@ export interface Sender<T> {
  */
 export class Channel<T, P extends PortLike = MessagePort>
 	implements Sender<T>, Receiver<T> {
-	protected channel: queueable.Channel<T>;
+	protected queue: Queue<T>;
 	protected iter: AsyncIterator<T>;
 
 	constructor(public port: P) {
-		const channel = (this.channel = new queueable.Channel());
-		port.onmessage = (e: MessageEvent) => channel.push(wire.decode(e.data));
-		port.onmessageerror = (e: MessageEvent) => channel.return(e.data);
-		this.iter = channel.wrap(() => port.close());
+		const queue = (this.queue = new Queue());
+		port.onmessage = (e: MessageEvent) => queue.push(wire.decode(e.data));
+		port.onmessageerror = (e: MessageEvent) => queue.return(e.data);
+		this.iter = queue.wrap(() => port.close());
 	}
 
 	[Symbol.asyncIterator](): AsyncIterator<T> {
@@ -60,7 +60,7 @@ export class Channel<T, P extends PortLike = MessagePort>
 	}
 
 	close() {
-		this.channel.return();
+		this.queue.return();
 	}
 }
 
@@ -80,22 +80,22 @@ export function broadcast<T>(name: string): Channel<T, BroadcastChannel> {
 }
 
 /**
- * Convert a `queueable.Channel` into one of our own.
+ * Convert a `Queue` into one of our own.
  */
-export function fromQueuable<T>(
-	channel: queueable.Channel<T> = new queueable.Channel<T>()
+export function fromQueue<T>(
+	queue: Queue<T> = new Queue<T>()
 ): Sender<T> & Receiver<T> {
 	return {
 		send(value: T) {
-			channel.push(value);
+			queue.push(value);
 		},
 
 		async recv(): Promise<T> {
-			return (await channel.next()).value;
+			return (await queue.next()).value;
 		},
 
 		[Symbol.asyncIterator](): AsyncIterator<T> {
-			return channel[Symbol.asyncIterator]();
+			return queue[Symbol.asyncIterator]();
 		},
 	};
 }
@@ -111,17 +111,17 @@ export type Select<T, R = any> = {
 export function select<T extends unknown[], R extends Receiver<T>>(
 	...channels: R[]
 ): Receiver<Select<T, R>> {
-	const channel = new queueable.Channel<Select<T, R>>();
+	const queue = new Queue<Select<T, R>>();
 
 	for (const ch of channels) {
 		(async () => {
 			for await (const value of ch) {
-				channel.push({ channel: ch, value });
+				queue.push({ channel: ch, value });
 			}
 		})();
 	}
 
-	const iter = channel.wrap(() => {
+	const iter = queue.wrap(() => {
 		for (const ch of channels) {
 			ch.close();
 		}
@@ -133,11 +133,11 @@ export function select<T extends unknown[], R extends Receiver<T>>(
 		},
 
 		async recv(): Promise<Select<T, R>> {
-			return (await channel.next()).value;
+			return (await queue.next()).value;
 		},
 
 		close() {
-			channel.close();
+			queue.close();
 		},
 	};
 }

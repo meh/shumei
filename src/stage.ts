@@ -1,5 +1,5 @@
 import * as _ from 'lodash';
-import * as queuable from 'queueable';
+import { Channel as Queue } from 'queueable';
 import { v4 as uuid } from 'uuid';
 import * as worker from './worker';
 import * as wire from './wire';
@@ -22,8 +22,8 @@ export interface Stage extends Sender<Message.Any> {
 }
 
 /**
-* The fully qualified address for an actor.
-*/
+ * The fully qualified address for an actor.
+ */
 export type Address = {
 	/**
 	 * UUID of the actor.
@@ -52,7 +52,7 @@ export class Live {
 	// FIXME(meh): There will need to be some way to garbage collect dead references;
 	//             consider abusing WeakMap.
 	private isReady: boolean;
-	private messages: queuable.Channel<Message.Any>;
+	private messages: Queue<Message.Any>;
 	private channel: Mailbox<Message.Any>;
 
 	private names: Map<string, string>;
@@ -67,9 +67,9 @@ export class Live {
 		this.actors = new Map();
 
 		this.isReady = false;
-		this.messages = new queuable.Channel<Message.Any>();
+		this.messages = new Queue<Message.Any>();
 		this.channel = new Mailbox(
-			channel.fromQueuable<Message.Any>(this.messages)
+			channel.fromQueue<Message.Any>(this.messages)
 		);
 
 		// FIXME(meh): The way things are designed there might be the need of an LRU
@@ -92,8 +92,8 @@ export class Live {
 	}
 
 	/**
-	* Mark the stage as ready.
-	*/
+	 * Mark the stage as ready, unblocking the worker that created the stage.
+	 */
 	ready(parent?: string): void {
 		if (parent) {
 			if (this.isReady) {
@@ -321,13 +321,13 @@ export class RemoteActor<T> implements Actor<T> {
 
 export class LocalActor<T> implements Actor<T> {
 	private id: string;
-	private messages: queuable.Channel<T>;
+	private messages: Queue<T>;
 	private channel: Mailbox<T>;
 
 	constructor(spawn: Spawn<T>) {
 		this.id = uuid();
-		this.messages = new queuable.Channel<T>();
-		this.channel = new Mailbox<T>(channel.fromQueuable<T>(this.messages));
+		this.messages = new Queue<T>();
+		this.channel = new Mailbox<T>(channel.fromQueue<T>(this.messages));
 
 		// Call the generator function with a reference to self.
 		const iter = spawn(
@@ -431,7 +431,7 @@ export namespace Message {
 		message: any;
 	};
 
-	export function isSend(msg: any): msg is Request {
+	export function isSend(msg: any): msg is Send {
 		return msg.type == Type.SEND && _.isObject(msg['actor']);
 	}
 

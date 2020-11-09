@@ -27,34 +27,34 @@ import { terser } from 'rollup-plugin-terser';
 const dev = process.env.NODE_ENV !== 'production';
 
 export default {
-	input: 'src/worker.ts',
+  input: 'src/worker.ts',
 
-	output: {
-		format: 'es',
-		sourcemap: dev && 'inline',
-	},
+  output: {
+    format: 'es',
+    sourcemap: dev && 'inline',
+  },
 
-	plugins: [
-		resolve({
-			browser: true,
-			preferBuiltins: false,
-		}),
-		alias({
-			resolve: ['.js', '.mjs', '.html', '.ts'],
-			entries:[{
-				find: '~',
-				replacement: path.join(__dirname, '.')
-			}]
-		}),
-		commonjs({
-			include: '../node_modules/**'
-		}),
-		typescript({ sourceMap: dev }),
-		rust({ debug: dev }),
-		json(),
-		rollup(),
-		!dev && terser(),
-	]
+  plugins: [
+    resolve({
+      browser: true,
+      preferBuiltins: false,
+    }),
+    alias({
+      resolve: ['.js', '.mjs', '.html', '.ts'],
+      entries:[{
+        find: '~',
+        replacement: path.join(__dirname, '.')
+      }]
+    }),
+    commonjs({
+      include: '../node_modules/**'
+    }),
+    typescript({ sourceMap: dev }),
+    rust({ debug: dev }),
+    json(),
+    rollup(),
+    !dev && terser(),
+  ]
 }
 ```
 
@@ -64,17 +64,17 @@ A file named `worker.ts`:
 import { stage } from "shumei";
 
 stage.register("add", async function*() {
-	while (true) {
-		const { from, a, b } = yield;
-		from.send(a + b);
-	}
+  while (true) {
+    const { from, a, b } = yield;
+    from.send(a + b);
+  }
 });
 
 stage.register("sub", async function*() {
-	while (true) {
-		const { from, a, b } = yield;
-		from.send(a - b);
-	}
+  while (true) {
+    const { from, a, b } = yield;
+    from.send(a - b);
+  }
 });
 
 stage.ready();
@@ -86,20 +86,20 @@ import WORKER from 'worker.rollup';
 import { stage, Actor } from "shumei";
 
 (async () => {
-	await stage.dedicated(WORKER);
+  await stage.dedicated(WORKER);
 
-	stage.spawn(async function*(self: Actor<number>) {
-		const add = await stage.actor("add");
-		const sub = await stage.actor("sub");
+  stage.spawn(async function*(self: Actor<number>) {
+    const add = await stage.actor("add");
+    const sub = await stage.actor("sub");
 
-		let result = 0;
-		add.send({ from: self, a: 2, b: 3 });
-		result = yield;
-		sub.send({ from: self, a: result, b: 2 });
-		result = yield;
+    let result = 0;
+    add.send({ from: self, a: 2, b: 3 });
+    result = yield;
+    sub.send({ from: self, a: result, b: 2 });
+    result = yield;
 
-		console.log(`IT'S ${result} GODDAMMIT!`);
-	});
+    console.log(`IT'S ${result} GODDAMMIT!`);
+  });
 })();
 ```
 
