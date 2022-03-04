@@ -1,5 +1,6 @@
-tabWidth: 2
-useTabs: true
-prose: always
-singleQuote: true
-arrowParens: avoid
+{
+	"printWidth": 100,
+	"singleQuote": true,
+	"semi": false,
+	"trailingComma": "es5"
+}

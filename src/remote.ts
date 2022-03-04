@@ -1,17 +1,18 @@
-import { v4 as uuid } from 'uuid';
-import * as _ from 'lodash';
-import * as wire from './wire';
-import { Channel, pair as mkChannelPair } from './channel';
-import { Mailbox } from './mailbox';
+import { v4 as uuid } from 'uuid'
+import * as _ from 'lodash'
+import * as wire from './wire'
+import { Sender, Receiver, Channel, pair as mkChannelPair } from './channel'
+import { Mailbox, Receiver as MailboxReceiver } from './mailbox'
+import { Deferred } from 'queueable'
 
 /**
  * Messages for the remote value protocol.
  */
-namespace Message {
-	export type ID = string;
+export namespace Message {
+	export type ID = string
 
 	export const enum Type {
-		CONSTRUCT,
+		CONSTRUCT = 0x20,
 		APPLY,
 		GET,
 		SET,
@@ -23,16 +24,18 @@ namespace Message {
 	 */
 	export namespace Construct {
 		export type Request = {
-			id: ID;
-			type: Type.CONSTRUCT;
-			arguments: wire.Value[];
-		};
+			id: ID
+			seq: ID
+			type: Type.CONSTRUCT
+			arguments: any
+		}
 
 		export type Response = {
-			id: ID;
-			type: Type.CONSTRUCT;
-			value: wire.Value;
-		};
+			id: ID
+			seq: ID
+			type: Type.CONSTRUCT
+			value: wire.Value
+		}
 	}
 
 	/**
@@ -40,16 +43,18 @@ namespace Message {
 	 */
 	export namespace Apply {
 		export type Request = {
-			id: ID;
-			type: Type.APPLY;
-			arguments: wire.Value[];
-		};
+			id: ID
+			seq: ID
+			type: Type.APPLY
+			arguments: any
+		}
 
 		export type Response = {
-			id: ID;
-			type: Type.APPLY;
-			value: wire.Value;
-		};
+			id: ID
+			seq: ID
+			type: Type.APPLY
+			value: wire.Value
+		}
 	}
 
 	/**
@@ -57,16 +62,18 @@ namespace Message {
 	 */
 	export namespace Get {
 		export type Request = {
-			id: ID;
-			type: Type.GET;
-			prop: PropertyKey;
-		};
+			id: ID
+			seq: ID
+			type: Type.GET
+			prop: PropertyKey
+		}
 
 		export type Response = {
-			id: ID;
-			type: Type.GET;
-			value: wire.Value;
-		};
+			id: ID
+			seq: ID
+			type: Type.GET
+			value: wire.Value
+		}
 	}
 
 	/**
@@ -74,32 +81,36 @@ namespace Message {
 	 */
 	export namespace Set {
 		export type Request = {
-			id: ID;
-			type: Type.SET;
-			prop: PropertyKey;
-			value: wire.Value;
-		};
+			id: ID
+			seq: ID
+			type: Type.SET
+			prop: PropertyKey
+			value: wire.Value
+		}
 
 		export type Response = {
-			id: ID;
-			type: Type.SET;
-		};
+			id: ID
+			seq: ID
+			type: Type.SET
+		}
 	}
 
 	/**
 	 * Equivalent of `Proxy.delete`.
 	 */
 	export namespace Delete {
-		export type Request = {
-			id: ID;
-			type: Type.DELETE;
-			prop: PropertyKey;
-		};
+		export interface Request {
+			id: ID
+			seq: ID
+			type: Type.DELETE
+			prop: PropertyKey
+		}
 
-		export type Response = {
-			id: ID;
-			type: Type.DELETE;
-		};
+		export interface Response {
+			id: ID
+			seq: ID
+			type: Type.DELETE
+		}
 	}
 
 	/**
@@ -110,7 +121,7 @@ namespace Message {
 		| Apply.Request
 		| Get.Request
 		| Set.Request
-		| Delete.Request;
+		| Delete.Request
 
 	/**
 	 * Any response message.
@@ -120,88 +131,48 @@ namespace Message {
 		| Apply.Response
 		| Get.Response
 		| Set.Response
-		| Delete.Response;
+		| Delete.Response
 
 	/**
 	 * Any message.
 	 */
-	export type Any = Request | Response;
+	export type Any = Request | Response
 }
 
-export namespace Thrown {
-	const MARKER = Symbol('shumei.thrown');
+const MARKER = Symbol('shumei.remote')
 
-	export interface Value {
-		[MARKER]: true;
-		value: wire.Clonable;
-	}
-
-	export type Encoded =
-		| { isError: true; value: Error }
-		| { isError: false; value: wire.Clonable };
-
-	wire.codec('throw', {
-		canHandle: (value: any): value is Value =>
-			_.isObject(value) && MARKER in value,
-
-		encode: ({ value }) => {
-			let encoded: Encoded = {
-				isError: false,
-				value,
-			};
-
-			if (value instanceof Error) {
-				encoded = {
-					isError: true,
-					value: {
-						message: value.message,
-						name: value.name,
-						stack: value.stack,
-					},
-				};
-			}
-
-			return [encoded, []];
-		},
-
-		decode: (encoded: Encoded) => {
-			throw encoded.isError
-				? Object.assign(new Error(encoded.value.message), encoded.value)
-				: encoded.value;
-		},
-	});
+export function isValue(value: any): value is Marked {
+	return _.isObject(value) && !!value[MARKER]
 }
-
-const MARKER = Symbol('shumei.remote');
 
 /**
  * A value marked as remote.
  */
-interface Marked {
-	[MARKER]: true;
+export interface Marked {
+	[MARKER]: true
 }
 
 /**
  * Mark a value as remote.
  */
 export function value<T extends object>(value: T): T & Marked {
-	return Object.assign(value, { [MARKER]: true }) as any;
+	return Object.assign(value, { [MARKER]: true }) as any
 }
 
 /**
  * Turns a type into a Promise if it is not one already.
  */
-type AsPromise<T> = T extends Promise<unknown> ? T : Promise<T>;
+type AsPromise<T> = T extends Promise<unknown> ? T : Promise<T>
 
 /**
  * The inverse of `AsPromise<T>`.
  */
-type AsNotPromise<P> = P extends Promise<infer T> ? T : P;
+type AsNotPromise<P> = P extends Promise<infer T> ? T : P
 
 /**
  * Either sync or async value.
  */
-type MaybePromise<T> = Promise<T> | T;
+type MaybePromise<T> = Promise<T> | T
 
 export namespace Local {
 	/**
@@ -211,19 +182,17 @@ export namespace Local {
 		? Value<T>
 		: T extends wire.Clonable
 		? T
-		: never;
+		: never
 
 	/**
 	 * A local property.
 	 */
-	export type Property<T> = T extends Function | Marked
-		? Value<T>
-		: AsNotPromise<T>;
+	export type Property<T> = T extends Function | Marked ? Value<T> : AsNotPromise<T>
 
 	/**
 	 * A local object.
 	 */
-	export type Object<T> = { [P in keyof T]: Property<T[P]> };
+	export type Object<T> = { [P in keyof T]: Property<T[P]> }
 
 	/**
 	 * A local value.
@@ -231,41 +200,35 @@ export namespace Local {
 	export type Value<T> = Object<T> &
 		(T extends (...args: infer Arguments) => infer Return
 			? (
-					...args: { [I in keyof Arguments]: Remote.AsValue<Arguments[I]> }
-			  ) => MaybePromise<AsValue<AsNotPromise<Return>>>
+				...args: { [I in keyof Arguments]: Remote.AsValue<Arguments[I]> }
+			) => MaybePromise<AsValue<AsNotPromise<Return>>>
 			: unknown) &
-		(T extends { new (...args: infer Arguments): infer Instance }
+		(T extends { new(...args: infer Arguments): infer Instance }
 			? {
-					new (
-						...args: {
-							[I in keyof Arguments]: Remote.AsValue<Arguments[I]>;
-						}
-					): MaybePromise<Value<AsNotPromise<Instance>>>;
-			  }
-			: unknown);
+				new(
+					...args: {
+						[I in keyof Arguments]: Remote.AsValue<Arguments[I]>
+					}
+				): MaybePromise<Value<AsNotPromise<Instance>>>
+			}
+			: unknown)
 }
 
 export namespace Remote {
 	/**
 	 * Turns a value into a remote or makes it be cloned.
 	 */
-	export type AsValue<T> = T extends Marked
-		? Value<T>
-		: T extends wire.Clonable
-		? T
-		: never;
+	export type AsValue<T> = T extends Marked ? Value<T> : T extends wire.Clonable ? T : never
 
 	/**
 	 * A remote property.
 	 */
-	export type Property<T> = T extends Function | Marked
-		? Value<T>
-		: AsPromise<T>;
+	export type Property<T> = T extends Function | Marked ? Value<T> : AsPromise<T>
 
 	/**
 	 * A remote object.
 	 */
-	export type Object<T> = { [P in keyof T]: Property<T[P]> };
+	export type Object<T> = { [P in keyof T]: Property<T[P]> }
 
 	/**
 	 * A remote value.
@@ -273,248 +236,235 @@ export namespace Remote {
 	export type Value<T> = Object<T> &
 		(T extends (...args: infer Arguments) => infer Return
 			? (
-					...args: { [I in keyof Arguments]: Local.AsValue<Arguments[I]> }
-			  ) => AsPromise<AsValue<AsNotPromise<Return>>>
+				...args: { [I in keyof Arguments]: Local.AsValue<Arguments[I]> }
+			) => AsPromise<AsValue<AsNotPromise<Return>>>
 			: unknown) &
-		(T extends { new (...args: infer Arguments): infer Instance }
+		(T extends { new(...args: infer Arguments): infer Instance }
 			? {
-					new (
-						...args: {
-							[I in keyof Arguments]: Local.AsValue<Arguments[I]>;
-						}
-					): AsPromise<Value<Instance>>;
-			  }
-			: unknown);
+				new(
+					...args: {
+						[I in keyof Arguments]: Local.AsValue<Arguments[I]>
+					}
+				): AsPromise<Value<Instance>>
+			}
+			: unknown)
 }
 
 /**
  * A remotely accessible value.
  */
-export function remote<T>(channel: Channel<Message.Any>): Remote.Value<T> {
-	const mbox = new Mailbox(channel);
-	const encodeAll = (args: any) =>
-		_.reduce(
-			args,
-			([args, transferable], val: any) => {
-				const [arg, transfer] = wire.encode(val);
-				return [
-					[...args, arg],
-					[...transferable, ...transfer],
-				];
-			},
-			[[], []]
-		);
-
+export function remote<T>(
+	id: string,
+	channel: Sender<Message.Any> & MailboxReceiver<Message.Any>
+): Remote.Value<T> {
 	// XXX(meh): If the `target` is not a function then `apply` won't be called,
 	//           and we need that.
-	return new Proxy(() => {}, {
-		async construct(
-			_target: any,
-			argArray: any,
-			_newTarget?: any
-		): Promise<object> {
-			const id = uuid();
-			const [args, transferable] = encodeAll(argArray);
+	return new Proxy(() => { }, {
+		async construct(_target: any, argArray: any, _newTarget?: any): Promise<object> {
+			const seq = uuid()
+			const args = wire.encode(argArray)
 			const message = <Message.Construct.Request>{
 				id,
+				seq,
 				type: Message.Type.CONSTRUCT,
 				arguments: args,
-			};
+			}
 
-			wire.transfer(message, transferable);
-			mbox.send(message);
+			wire.transfer(message, wire.transferable(args))
+			channel.send(message)
 
-			const response = (await mbox.match(
-				(msg: Message.Any) => msg.id == id
-			)) as Message.Construct.Response;
+			const response = (await channel.match(
+				(msg: Message.Any) => msg.id == id && msg.seq == seq
+			)) as Message.Construct.Response
 
-			return response.value;
+			return response.value
 		},
 
 		async apply(_target: any, _thisArg: any, argArray?: any): Promise<any> {
-			const id = uuid();
-			const [args, transferable] = encodeAll(argArray || []);
-			const message = <Message.Apply.Request>{
+			const seq = uuid()
+			channel.send(<Message.Apply.Request>{
 				id,
+				seq,
 				type: Message.Type.APPLY,
-				arguments: args,
-			};
+				arguments: argArray,
+			})
 
-			wire.transfer(message, transferable);
-			mbox.send(message);
+			const response = (await channel.match(
+				(msg: Message.Any) => msg.id == id && msg.seq == seq
+			)) as Message.Apply.Response
 
-			const response = (await mbox.match(
-				(msg: Message.Any) => msg.id == id
-			)) as Message.Apply.Response;
-
-			return response.value;
+			return response.value
 		},
 
 		async get(_target: any, p: PropertyKey, _receiver: any): Promise<any> {
 			// XXX(meh): When a `Proxy` is awaited "then" is requested, this should return a value
 			//           with a `then` property or it's going to lead to infinite recursion.
 			if (p == 'then') {
-				return Promise.resolve(this);
+				return Promise.resolve(this)
 			}
 
-			const id = uuid();
-			const message = <Message.Get.Request>{
+			const seq = uuid()
+			channel.send(<Message.Get.Request>{
 				id,
+				seq,
 				type: Message.Type.GET,
 				prop: p,
-			};
+			})
 
-			mbox.send(message);
+			const response = (await channel.match(
+				(msg: Message.Any) => msg.id == id && msg.seq == seq
+			)) as Message.Get.Response
 
-			const response = (await mbox.match(
-				(msg: Message.Any) => msg.id == id
-			)) as Message.Get.Response;
-
-			return response.value;
+			return response.value
 		},
 
 		set(_target: any, p: PropertyKey, value: any, _receiver: any): boolean {
-			const id = uuid();
-			const [encoded, transferable] = wire.encode(value);
-
-			const message = <Message.Set.Request>{
+			const seq = uuid()
+			channel.send(<Message.Set.Request>{
 				id,
+				seq,
 				type: Message.Type.SET,
 				prop: p,
-				value: encoded,
-			};
+				value,
+			})
 
-			wire.transfer(message, transferable);
-			mbox.send(message);
-			mbox.match((msg: Message.Any) => msg.id == id);
+			channel.match((msg: Message.Any) => msg.id == id && msg.seq == seq)
 
-			return true;
+			return true
 		},
 
 		deleteProperty(_target: any, p: PropertyKey): boolean {
-			const id = uuid();
-			const message = <Message.Delete.Request>{
+			const seq = uuid()
+			channel.send(<Message.Delete.Request>{
 				id,
+				seq,
 				type: Message.Type.DELETE,
 				prop: p,
-			};
+			})
 
-			mbox.send(message);
-			mbox.match((msg: Message.Any) => msg.id == id);
+			channel.match((msg: Message.Any) => msg.id == id && msg.seq == seq)
 
-			return true;
+			return true
 		},
-	});
+	})
 }
 
 /**
  * Spawn a new remote handler that can respond to control messages.
  */
-export function spawn(value: any): Channel<Message.Any> {
-	const [master, slave] = mkChannelPair<Message.Any>();
-	const handle = (channel: Channel<Message.Any>) => {
-		channel.recv().then(msg => {
-			switch (msg.type) {
-				case Message.Type.CONSTRUCT:
-					{
-						const request = msg as Message.Construct.Request;
-						const [encoded, transferable] = wire.encode(
-							Reflect.construct(value, request.arguments)
-						);
+export function spawn(
+	value: any,
+	channel: Sender<Message.Any> & MailboxReceiver<Message.Any> & wire.Wired
+) {
+	const id = uuid()
+	const handle = async () => {
+		const msg = await channel.match(
+			(msg) => msg.type >= Message.Type.CONSTRUCT && msg.type <= Message.Type.DELETE && msg.id == id
+		)
 
-						const message = <Message.Construct.Response>{
-							id: msg.id,
-							type: Message.Type.CONSTRUCT,
-							value: encoded,
-						};
+		switch (msg.type) {
+			case Message.Type.CONSTRUCT:
+				{
+					const request = msg as Message.Construct.Request
+					channel.send(<Message.Construct.Response>{
+						id: msg.id,
+						seq: msg.seq,
+						type: Message.Type.CONSTRUCT,
+						value: wire.encode(Reflect.construct(value, request.arguments)),
+					})
+				}
+				break
 
-						wire.transfer(message, transferable);
-						master.send(message);
-					}
-					break;
+			case Message.Type.APPLY:
+				{
+					const request = msg as Message.Apply.Request
+					channel.send(<Message.Apply.Response>{
+						id: msg.id,
+						seq: msg.seq,
+						type: Message.Type.APPLY,
+						value: wire.encode(Reflect.apply(value, undefined, request.arguments)),
+					})
+				}
+				break
 
-				case Message.Type.APPLY:
-					{
-						const request = msg as Message.Apply.Request;
-						const [encoded, transferable] = wire.encode(
-							Reflect.apply(value, undefined, request.arguments)
-						);
+			case Message.Type.GET:
+				{
+					const request = msg as Message.Get.Request
+					channel.send(<Message.Get.Response>{
+						id: msg.id,
+						seq: msg.seq,
+						type: Message.Type.GET,
+						value: wire.encode(Reflect.get(value, request.prop)),
+					})
+				}
+				break
 
-						const message = <Message.Apply.Response>{
-							id: msg.id,
-							type: Message.Type.APPLY,
-							value: encoded,
-						};
+			case Message.Type.SET:
+				{
+					const request = msg as Message.Set.Request
 
-						wire.transfer(message, transferable);
-						master.send(message);
-					}
-					break;
+					Reflect.set(value, request.prop, request.value)
+					channel.send(<Message.Set.Response>{
+						id: msg.id,
+						seq: msg.seq,
+						type: Message.Type.SET,
+					})
+				}
+				break
 
-				case Message.Type.GET:
-					{
-						const request = msg as Message.Get.Request;
-						const [encoded, transferable] = wire.encode(
-							Reflect.get(value, request.prop)
-						);
+			case Message.Type.DELETE:
+				{
+					const request = msg as Message.Delete.Request
 
-						const message = <Message.Get.Response>{
-							id: msg.id,
-							type: Message.Type.GET,
-							value: encoded,
-						};
+					Reflect.deleteProperty(value, request.prop)
+					channel.send(<Message.Delete.Response>{
+						id: msg.id,
+						seq: msg.seq,
+						type: Message.Type.DELETE,
+					})
+				}
+				break
+		}
 
-						wire.transfer(message, transferable);
-						master.send(message);
-					}
-					break;
+		handle()
+	}
+	handle()
 
-				case Message.Type.SET:
-					{
-						const request = msg as Message.Set.Request;
-						Reflect.set(value, request.prop, request.value);
-
-						const message = <Message.Set.Response>{
-							id: msg.id,
-							type: Message.Type.SET,
-						};
-
-						master.send(message);
-					}
-					break;
-
-				case Message.Type.DELETE:
-					{
-						const request = msg as Message.Delete.Request;
-						Reflect.deleteProperty(value, request.prop);
-
-						const message = <Message.Delete.Response>{
-							id: msg.id,
-							type: Message.Type.DELETE,
-						};
-
-						master.send(message);
-					}
-					break;
-			}
-
-			handle(channel);
-		});
-	};
-
-	handle(master);
-	return slave;
+	return id
 }
 
-wire.codec('Function', {
-	canHandle: (value: unknown): value is Function => _.isFunction(value),
-	encode: value => wire.encode(spawn(value)),
-	decode: (value: any): Remote.Value<Function> => remote(wire.decode(value)),
-});
+wire.codec({
+	name: 'Remote.Value',
+	canHandle: (value: unknown): value is Marked => isValue(value),
 
-wire.codec('Remote', {
-	canHandle: (value: unknown): value is Marked =>
-		_.isObject(value) && (value as Marked)[MARKER],
-	encode: value => wire.encode(spawn(value)),
-	decode: <T>(value: any): Remote.Value<T> => remote(wire.decode(value)),
-});
+	encode: (value, wire) => {
+		const [master, slave] = mkChannelPair<Message.Any>()
+		const id = spawn(value, new Mailbox(master))
+		const channel = wire.encode(slave)
+
+		return [{ id, channel }, wire.transferable(channel)]
+	},
+
+	decode: <T>(value, wire): Remote.Value<T> =>
+		remote(value.id, new Mailbox(wire.decode(value.channel))),
+})
+
+wire.codec({
+	name: 'Function',
+	canHandle: (value: unknown): value is Function => _.isFunction(value),
+
+	encode: (value, wire) => wire.codecFor('Remote.Value').encode(value, wire),
+
+	decode: (value: any, wire) =>
+		wire.codecFor('Remote.Value').decode(value, wire) as Remote.Value<Function>,
+})
+
+wire.codec({
+	name: 'Deferred',
+	canHandle: <T>(value: unknown): value is Deferred<T> => value instanceof Deferred,
+
+	encode: (value, wire) => wire.codecFor('Remote.Value').encode(value, wire),
+
+	decode: <T>(value: any, wire) =>
+		wire.codecFor('Remote.Value').decode(value) as Remote.Value<Deferred<T>>,
+})
