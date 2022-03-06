@@ -3,7 +3,7 @@ import path from 'path';
 
 import resolve from '@rollup/plugin-node-resolve';
 import alias from '@rollup/plugin-alias';
-import typescript from '@rollup/plugin-typescript';
+import typescript from 'rollup-plugin-ts';
 import commonjs from '@rollup/plugin-commonjs';
 
 const dev = process.env.NODE_ENV !== 'production';
@@ -28,7 +28,7 @@ export default {
 		}),
 		alias({
 			resolve: ['.js', '.mjs', '.html', '.ts'],
-			entries:[{
+			entries: [{
 				find: '~',
 				replacement: path.join(__dirname, './src')
 			}]

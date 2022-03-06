@@ -4,7 +4,9 @@
     "module": "ESNext",
     "target": "ESNext",
     "typeRoots": ["src/types"],
-    "moduleResolution": "Node"
+    "moduleResolution": "Node",
+    "esModuleInterop": true,
+    "declaration": true
   },
   "exclude": ["dist", "node_modules"]
 }
