@@ -200,17 +200,17 @@ export namespace Local {
 	export type Value<T> = Object<T> &
 		(T extends (...args: infer Arguments) => infer Return
 			? (
-				...args: { [I in keyof Arguments]: Remote.AsValue<Arguments[I]> }
-			) => MaybePromise<AsValue<AsNotPromise<Return>>>
+					...args: { [I in keyof Arguments]: Remote.AsValue<Arguments[I]> }
+			  ) => MaybePromise<AsValue<AsNotPromise<Return>>>
 			: unknown) &
-		(T extends { new(...args: infer Arguments): infer Instance }
+		(T extends { new (...args: infer Arguments): infer Instance }
 			? {
-				new(
-					...args: {
-						[I in keyof Arguments]: Remote.AsValue<Arguments[I]>
-					}
-				): MaybePromise<Value<AsNotPromise<Instance>>>
-			}
+					new (
+						...args: {
+							[I in keyof Arguments]: Remote.AsValue<Arguments[I]>
+						}
+					): MaybePromise<Value<AsNotPromise<Instance>>>
+			  }
 			: unknown)
 }
 
@@ -236,17 +236,17 @@ export namespace Remote {
 	export type Value<T> = Object<T> &
 		(T extends (...args: infer Arguments) => infer Return
 			? (
-				...args: { [I in keyof Arguments]: Local.AsValue<Arguments[I]> }
-			) => AsPromise<AsValue<AsNotPromise<Return>>>
+					...args: { [I in keyof Arguments]: Local.AsValue<Arguments[I]> }
+			  ) => AsPromise<AsValue<AsNotPromise<Return>>>
 			: unknown) &
-		(T extends { new(...args: infer Arguments): infer Instance }
+		(T extends { new (...args: infer Arguments): infer Instance }
 			? {
-				new(
-					...args: {
-						[I in keyof Arguments]: Local.AsValue<Arguments[I]>
-					}
-				): AsPromise<Value<Instance>>
-			}
+					new (
+						...args: {
+							[I in keyof Arguments]: Local.AsValue<Arguments[I]>
+						}
+					): AsPromise<Value<Instance>>
+			  }
 			: unknown)
 }
 
@@ -259,7 +259,7 @@ export function remote<T>(
 ): Remote.Value<T> {
 	// XXX(meh): If the `target` is not a function then `apply` won't be called,
 	//           and we need that.
-	return new Proxy(() => { }, {
+	return new Proxy(() => {}, {
 		async construct(_target: any, argArray: any, _newTarget?: any): Promise<object> {
 			const seq = uuid()
 			const args = wire.encode(argArray)
