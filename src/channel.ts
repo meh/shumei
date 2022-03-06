@@ -42,7 +42,13 @@ export class Channel<T, P extends PortLike = MessagePort> implements Sender<T>, 
 		this.wire = wire || Wire.live()
 
 		const queue = (this.queue = new Queue())
-		port.onmessage = (e: MessageEvent) => queue.push(this.wire.decode(e.data))
+		port.onmessage = (e: MessageEvent) => {
+			const value = this.wire.decode(e.data)
+
+			if (value !== undefined) {
+				queue.push(this.wire.decode(e.data))
+			}
+		}
 		port.onmessageerror = (e: MessageEvent) => queue.return(e.data)
 		this.iter = queue.wrap(() => port.close())
 	}

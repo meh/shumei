@@ -126,6 +126,7 @@ export class Wire {
 
 	constructor(public options?: Options) {
 		this.codecs = new Map(codecs)
+		this.transfers = new WeakMap()
 	}
 
 	codec<E, C extends Clonable, D>(codec: Codec<E, C, D>): Codec<E, C, D> {
